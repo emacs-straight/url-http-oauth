@@ -3,7 +3,7 @@
 ;; Copyright (C) 2023 Free Software Foundation, Inc.
 
 ;; Author: Thomas Fitzsimmons <fitzsim@fitzsim.org>
-;; Version: 0.8.2
+;; Version: 0.8.3
 ;; Keywords: comm, data, processes, hypermedia
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -21,15 +21,16 @@
 
 ;;; Commentary:
 ;;
-;; This package adds OAuth 2.0 support to Emacs's URL library.
+;; url-http-oauth adds OAuth 2.0 support to Emacs's URL library.
 ;;
 ;; Installation:
 ;;
-;; M-x package-install RET url-http-oauth RET
+;; M-x package-install RET url-http-oauth
 ;;
 ;; Usage:
 ;;
-;; See url-http-oauth-demo.el.
+;; See url-http-oauth-demo.el, which is installed alongside
+;; url-http-oauth.el.
 
 ;;; Code:
 (require 'url-auth)
@@ -99,6 +100,7 @@ URL is an object or a string."
 ;; catches on, authorization-url and access-token-url can be made
 ;; optional and their values retrieved automatically.  As of early
 ;; 2023, RFC 8414 is not consistently implemented yet.
+;;;###autoload
 (defun url-http-oauth-interpose (url-settings)
   "Arrange for Emacs to use OAuth 2.0 to access a URL using URL-SETTINGS.
 URL-SETTINGS is an association list (alist) with fields whose
@@ -139,14 +141,18 @@ REDIRECT_URI.
 AUTHORIZATION-CODE-FUNCTION is an elisp function that takes an
 authorization URL as a string argument, and returns, as a string,
 a full URL containing a code value in its query string."
-  (let* ((client-secret-method
-          (cdr (assoc "client-secret-method" url-settings))))
+  (let ((client-identifier (cdr (assoc "client-identifier" url-settings)))
+        (client-secret-method
+         (cdr (assoc "client-secret-method" url-settings))))
+    (unless (and (stringp client-identifier) (> (length client-identifier) 0))
+      (error "url-http-oauth: Unset client-identifier value"))
     (unless (or (eq client-secret-method 'prompt) (eq client-secret-method nil))
       (error "url-http-oauth: Unrecognized client-secret-method value"))
     (prog1
         (add-to-list 'url-http-oauth--interposed url-settings)
       (url-http-oauth--update-regexp))))
 
+;;;###autoload
 (defun url-http-oauth-uninterpose (url-settings)
   "Arrange for Emacs not to use OAuth 2.0 when accessing URL in URL-SETTINGS.
 This function does the opposite of `url-http-oauth-interpose'."
@@ -155,6 +161,7 @@ This function does the opposite of `url-http-oauth-interpose'."
             (delete url-settings url-http-oauth--interposed))
     (url-http-oauth--update-regexp)))
 
+;;;###autoload
 (defun url-http-oauth-interposed-p (url)
   "Return non-nil if `url' will use OAuth 2.0 to access URL.
 URL is an object."
@@ -435,17 +442,20 @@ The entry is cleared from the `password-data' cache after the
               (when prior-start-point
                 (goto-char prior-start-point)
                 (auth-source-netrc-parse-next-interesting)
-                (goto-char (pos-bol))
+                (goto-char (line-beginning-position))
                 (let ((extents
                        (if (bobp)
                            (progn
-                             (goto-char (pos-eol))
+                             (goto-char (line-end-position))
                              (if (eobp)
-                                 (cons (pos-bol) (pos-eol))
-                               (cons (pos-bol) (1+ (pos-eol)))))
+                                 (cons (line-beginning-position)
+                                       (line-end-position))
+                               (cons (line-beginning-position)
+                                     (1+ (line-end-position)))))
                          (progn
-                           (goto-char (pos-eol))
-                           (cons (1- (pos-bol)) (pos-eol))))))
+                           (goto-char (line-end-position))
+                           (cons (1- (line-beginning-position))
+                                 (line-end-position))))))
                   (let ((region-to-delete (buffer-substring (car extents)
                                                             (cdr extents))))
                     (when (or (not (eq auth-source-save-behavior 'ask))
